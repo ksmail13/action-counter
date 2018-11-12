@@ -3,8 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	
-	"github.com/2DP/action-counter/server"
+	"github.com/2DP/action-counter/config/config"
 )
 
 func main() {

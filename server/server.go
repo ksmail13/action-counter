@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"github.com/gorilla/mux"
 	"github.com/google/uuid"
+	"github.com/2DP/action-counter/config/config"
 )
 
 type Server struct {
