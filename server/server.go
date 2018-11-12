@@ -1,11 +1,13 @@
 package server
 
 import (
-	"log"
+	"encoding/json"
 	"net/http"
+	"log"
+	
 	"github.com/gorilla/mux"
-	"github.com/google/uuid"
-	"github.com/2DP/action-counter/config/config"
+	"github.com/2DP/action-counter/config"
+	"github.com/2DP/action-counter/model"
 )
 
 type Server struct {
@@ -13,38 +15,79 @@ type Server struct {
 	Config *config.Config
 }
 
-func (server *Server) Initialize(config *Config) {
+
+
+func (server *Server) Initialize(config *config.Config) {
+	server.Config = config
 	server.Router = mux.NewRouter()
 	server.setRouters()
 }
 
 func (server *Server) setRouters() {
-	server.Router.Get("/uuid", server.CreateUUID)
+	server.Get("/counter", server.CreateCounter)
+	server.Put("/counter/{uuid:[a-z0-9-]+}", server.UpdateCounter)
+	server.Delete("/counter/{uuid:[a-z0-9-]+}", server.DeleteCounter)
 }
 
-func (server *server) CreateUUID() sdtring {
-	return uuid.UUID.String();
+func (server *Server) Run(host string) {
+	log.Fatal(http.ListenAndServe(host, server.Router))
 }
 
-// setRouters sets the all required routers
-/*
-func (a *App) setRouters() {
-	// Routing for handling the projects
-	a.Get("/projects", a.GetAllProjects)
-	a.Post("/projects", a.CreateProject)
-	a.Get("/projects/{title}", a.GetProject)
-	a.Put("/projects/{title}", a.UpdateProject)
-	a.Delete("/projects/{title}", a.DeleteProject)
-	a.Put("/projects/{title}/archive", a.ArchiveProject)
-	a.Delete("/projects/{title}/archive", a.RestoreProject)
 
-	// Routing for handling the tasks
-	a.Get("/projects/{title}/tasks", a.GetAllTasks)
-	a.Post("/projects/{title}/tasks", a.CreateTask)
-	a.Get("/projects/{title}/tasks/{id:[0-9]+}", a.GetTask)
-	a.Put("/projects/{title}/tasks/{id:[0-9]+}", a.UpdateTask)
-	a.Delete("/projects/{title}/tasks/{id:[0-9]+}", a.DeleteTask)
-	a.Put("/projects/{title}/tasks/{id:[0-9]+}/complete", a.CompleteTask)
-	a.Delete("/projects/{title}/tasks/{id:[0-9]+}/complete", a.UndoTask)
+
+func (server *Server) Get(path string, f func(w http.ResponseWriter, r *http.Request)) {
+	server.Router.HandleFunc(path, f).Methods("GET")
 }
-*/
+
+func (server *Server) Post(path string, f func(w http.ResponseWriter, r *http.Request)) {
+	server.Router.HandleFunc(path, f).Methods("POST")
+}
+
+func (server *Server) Put(path string, f func(w http.ResponseWriter, r *http.Request)) {
+	server.Router.HandleFunc(path, f).Methods("PUT")
+}
+
+func (server *Server) Delete(path string, f func(w http.ResponseWriter, r *http.Request)) {
+	server.Router.HandleFunc(path, f).Methods("DELETE")
+}
+
+
+
+func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+	response, err := json.Marshal(payload)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write([]byte(response))
+}
+
+func respondError(w http.ResponseWriter, code int, message string) {
+	respondJSON(w, code, map[string]string{"error": message})
+}
+
+
+
+func (server *Server) CreateCounter(w http.ResponseWriter, r *http.Request) {
+	// TODO: 새로운 카운터 세션을 생성해서 반
+	counter := model.Counter{UUID: "test-uuid-001", Count:1}
+	respondJSON(w, http.StatusOK, counter)
+}
+
+func (server *Server) UpdateCounter(w http.ResponseWriter, r *http.Request) {
+	// TODO: 저장소에서 uuid로 카운터를 조회해서 카운터 증가 후 반
+	vars := mux.Vars(r)
+	uuid := vars["uuid"]
+
+	counter := model.Counter{UUID: uuid, Count:2}
+	respondJSON(w, http.StatusOK, counter)
+}
+
+func (server *Server) DeleteCounter(w http.ResponseWriter, r *http.Request) {
+	// TODO 카운터 삭제
+	counter := model.Counter{UUID: "test-uuid-001", Count:0}
+	respondJSON(w, http.StatusOK, counter)
+}
