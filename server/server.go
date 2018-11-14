@@ -2,12 +2,13 @@ package server
 
 import (
 	"encoding/json"
-	"net/http"
 	"log"
-	
+	"net/http"
+
+	"../config"
+	"../model"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/2DP/action-counter/config"
-	"github.com/2DP/action-counter/model"
 )
 
 type Server struct {
@@ -15,7 +16,7 @@ type Server struct {
 	Config *config.Config
 }
 
-
+var countMap map[string]int = make(map[string]int)
 
 func (server *Server) Initialize(config *config.Config) {
 	server.Config = config
@@ -33,8 +34,6 @@ func (server *Server) Run(host string) {
 	log.Fatal(http.ListenAndServe(host, server.Router))
 }
 
-
-
 func (server *Server) Get(path string, f func(w http.ResponseWriter, r *http.Request)) {
 	server.Router.HandleFunc(path, f).Methods("GET")
 }
@@ -50,8 +49,6 @@ func (server *Server) Put(path string, f func(w http.ResponseWriter, r *http.Req
 func (server *Server) Delete(path string, f func(w http.ResponseWriter, r *http.Request)) {
 	server.Router.HandleFunc(path, f).Methods("DELETE")
 }
-
-
 
 func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	response, err := json.Marshal(payload)
@@ -69,11 +66,12 @@ func respondError(w http.ResponseWriter, code int, message string) {
 	respondJSON(w, code, map[string]string{"error": message})
 }
 
-
-
 func (server *Server) CreateCounter(w http.ResponseWriter, r *http.Request) {
 	// TODO: 새로운 카운터 세션을 생성해서 반
-	counter := model.Counter{UUID: "test-uuid-001", Count:1}
+	uuid := uuid.New()
+	counter := model.Counter{UUID: uuid.String(), Count: 1}
+	log.Printf("create %s", uuid)
+	countMap[uuid.String()] = 1
 	respondJSON(w, http.StatusOK, counter)
 }
 
@@ -81,13 +79,18 @@ func (server *Server) UpdateCounter(w http.ResponseWriter, r *http.Request) {
 	// TODO: 저장소에서 uuid로 카운터를 조회해서 카운터 증가 후 반
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
-
-	counter := model.Counter{UUID: uuid, Count:2}
+	cnt := countMap[uuid]
+	countMap[uuid] = cnt + 1
+	counter := model.Counter{UUID: uuid, Count: cnt + 1}
 	respondJSON(w, http.StatusOK, counter)
 }
 
 func (server *Server) DeleteCounter(w http.ResponseWriter, r *http.Request) {
 	// TODO 카운터 삭제
-	counter := model.Counter{UUID: "test-uuid-001", Count:0}
+	vars := mux.Vars(r)
+	uuid := vars["uuid"]
+	cnt := countMap[uuid]
+	countMap[uuid] = cnt - 1
+	counter := model.Counter{UUID: uuid, Count: cnt - 1}
 	respondJSON(w, http.StatusOK, counter)
 }
