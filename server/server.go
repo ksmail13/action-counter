@@ -2,8 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 
 	"../config"
 	"../model"
@@ -16,7 +18,7 @@ type Server struct {
 	Config *config.Config
 }
 
-var countMap map[string]int = make(map[string]int)
+var countMap map[string]model.Counter = make(map[string]model.Counter)
 
 func (server *Server) Initialize(config *config.Config) {
 	server.Config = config
@@ -25,7 +27,8 @@ func (server *Server) Initialize(config *config.Config) {
 }
 
 func (server *Server) setRouters() {
-	server.Get("/counter", server.CreateCounter)
+	server.Get("/counter/{uuid:[a-z0-9-]+}", server.GetCounter)
+	server.Post("/counter", server.CreateCounter)
 	server.Put("/counter/{uuid:[a-z0-9-]+}", server.UpdateCounter)
 	server.Delete("/counter/{uuid:[a-z0-9-]+}", server.DeleteCounter)
 }
@@ -66,12 +69,30 @@ func respondError(w http.ResponseWriter, code int, message string) {
 	respondJSON(w, code, map[string]string{"error": message})
 }
 
+func (server *Server) GetCounter(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	uuid := vars["uuid"]
+	log.Printf("get UUID : %s", uuid)
+	respondJSON(w, http.StatusOK, countMap[uuid])
+}
+
 func (server *Server) CreateCounter(w http.ResponseWriter, r *http.Request) {
 	// TODO: 새로운 카운터 세션을 생성해서 반
 	uuid := uuid.New()
-	counter := model.Counter{UUID: uuid.String(), Count: 1}
+	rawbody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	body := new(model.CounterCreate)
+	err = json.Unmarshal(rawbody, &body)
+	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	counter := model.Counter{UUID: uuid.String(), Count: 1, Life: time.Now().Add(body.Duration)}
 	log.Printf("create %s", uuid)
-	countMap[uuid.String()] = 1
+	countMap[uuid.String()] = counter
 	respondJSON(w, http.StatusOK, counter)
 }
 
@@ -80,9 +101,9 @@ func (server *Server) UpdateCounter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
 	cnt := countMap[uuid]
-	countMap[uuid] = cnt + 1
-	counter := model.Counter{UUID: uuid, Count: cnt + 1}
-	respondJSON(w, http.StatusOK, counter)
+	cnt.Count++
+
+	respondJSON(w, http.StatusOK, cnt)
 }
 
 func (server *Server) DeleteCounter(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +111,6 @@ func (server *Server) DeleteCounter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
 	cnt := countMap[uuid]
-	countMap[uuid] = cnt - 1
-	counter := model.Counter{UUID: uuid, Count: cnt - 1}
-	respondJSON(w, http.StatusOK, counter)
+	cnt.Count--
+	respondJSON(w, http.StatusOK, cnt)
 }
