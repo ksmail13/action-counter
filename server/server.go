@@ -6,20 +6,19 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/ksmail13/action-counter/config"
+	"github.com/ksmail13/action-counter/errors"
 	"github.com/ksmail13/action-counter/model"
+	"github.com/ksmail13/action-counter/repository"
 )
 
 type Server struct {
 	Router *mux.Router
 	Config *config.Config
+	Repo   repository.Repository
 }
-
-var countMap map[string]model.Counter = make(map[string]model.Counter)
 
 func (server *Server) Initialize(config *config.Config) {
 	server.Config = config
@@ -28,10 +27,10 @@ func (server *Server) Initialize(config *config.Config) {
 }
 
 func (server *Server) setRouters() {
-	server.Get("/counter/{uuid:[a-z0-9-]+}", server.GetCounter)
-	server.Post("/counter", server.CreateCounter)
-	server.Put("/counter/{uuid:[a-z0-9-]+}", server.UpdateCounter)
-	server.Delete("/counter/{uuid:[a-z0-9-]+}", server.DeleteCounter)
+	server.Get("/counter/{uuid:[a-z0-9-]+}", server.getCounter)
+	server.Post("/counter", server.createCounter)
+	server.Put("/counter/{uuid:[a-z0-9-]+}", server.updateCounter)
+	server.Delete("/counter/{uuid:[a-z0-9-]+}", server.deleteCounter)
 }
 
 func (server *Server) Run(host string) {
@@ -67,21 +66,39 @@ func ResponseJSON(w http.ResponseWriter, status int, payload interface{}) {
 }
 
 func RespondError(w http.ResponseWriter, code int, format string, args ...interface{}) {
-	errMsg := fmt.Sprintf(format, args)
+	errMsg := fmt.Sprintf(format, args...)
 	log.Println(errMsg)
 	ResponseJSON(w, code, map[string]interface{}{"error": errMsg, "code": code})
 }
 
-func (server *Server) GetCounter(w http.ResponseWriter, r *http.Request) {
+func errorHandle(w http.ResponseWriter, e error) {
+	if err, ok := e.(*errors.CodeError); ok {
+		RespondError(w, err.Code(), err.Message())
+		return
+	}
+	log.Printf("unexpect error %s", e)
+	RespondError(w, http.StatusInternalServerError, "unexpect error")
+}
+
+func response(w http.ResponseWriter, v model.Counter, e error) {
+
+	if e != nil {
+		errorHandle(w, e)
+		return
+	}
+
+	ResponseJSON(w, http.StatusOK, v)
+}
+
+func (server *Server) getCounter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
 	log.Printf("get UUID : %s", uuid)
-	ResponseJSON(w, http.StatusOK, countMap[uuid])
+	v, e := server.Repo.Get(uuid)
+	response(w, v, e)
 }
 
-func (server *Server) CreateCounter(w http.ResponseWriter, r *http.Request) {
-	// TODO: 새로운 카운터 세션을 생성해서 반
-	uuid := uuid.New()
+func (server *Server) createCounter(w http.ResponseWriter, r *http.Request) {
 	rawbody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, "error while read request body [%s]", err)
@@ -93,27 +110,21 @@ func (server *Server) CreateCounter(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusBadRequest, "invalid request body [%s]", err)
 		return
 	}
-	counter := model.Counter{UUID: uuid.String(), Count: 1, Life: time.Now().Add(body.Duration)}
-	log.Printf("create %s", uuid)
-	countMap[uuid.String()] = counter
-	ResponseJSON(w, http.StatusOK, counter)
+	v, e := server.Repo.Set(body.Duration)
+	response(w, v, e)
 }
 
-func (server *Server) UpdateCounter(w http.ResponseWriter, r *http.Request) {
-	// TODO: 저장소에서 uuid로 카운터를 조회해서 카운터 증가 후 반
+func (server *Server) updateCounter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
-	cnt := countMap[uuid]
-	cnt.Count++
-
-	ResponseJSON(w, http.StatusOK, cnt)
+	v, e := server.Repo.Increase(uuid)
+	response(w, v, e)
 }
 
-func (server *Server) DeleteCounter(w http.ResponseWriter, r *http.Request) {
-	// TODO 카운터 삭제
+func (server *Server) deleteCounter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
-	cnt := countMap[uuid]
-	cnt.Count--
-	ResponseJSON(w, http.StatusOK, cnt)
+
+	v, e := server.Repo.Decrease(uuid)
+	response(w, v, e)
 }
