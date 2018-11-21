@@ -2,15 +2,16 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
-	"../config"
-	"../model"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/ksmail13/action-counter/config"
+	"github.com/ksmail13/action-counter/model"
 )
 
 type Server struct {
@@ -53,7 +54,7 @@ func (server *Server) Delete(path string, f func(w http.ResponseWriter, r *http.
 	server.Router.HandleFunc(path, f).Methods("DELETE")
 }
 
-func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+func ResponseJSON(w http.ResponseWriter, status int, payload interface{}) {
 	response, err := json.Marshal(payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -65,15 +66,17 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Write([]byte(response))
 }
 
-func respondError(w http.ResponseWriter, code int, message string) {
-	respondJSON(w, code, map[string]string{"error": message})
+func RespondError(w http.ResponseWriter, code int, format string, args ...interface{}) {
+	errMsg := fmt.Sprintf(format, args)
+	log.Println(errMsg)
+	ResponseJSON(w, code, map[string]interface{}{"error": errMsg, "code": code})
 }
 
 func (server *Server) GetCounter(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
 	log.Printf("get UUID : %s", uuid)
-	respondJSON(w, http.StatusOK, countMap[uuid])
+	ResponseJSON(w, http.StatusOK, countMap[uuid])
 }
 
 func (server *Server) CreateCounter(w http.ResponseWriter, r *http.Request) {
@@ -81,19 +84,19 @@ func (server *Server) CreateCounter(w http.ResponseWriter, r *http.Request) {
 	uuid := uuid.New()
 	rawbody, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		RespondError(w, http.StatusBadRequest, "error while read request body [%s]", err)
 		return
 	}
 	body := new(model.CounterCreate)
 	err = json.Unmarshal(rawbody, &body)
 	if err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		RespondError(w, http.StatusBadRequest, "invalid request body [%s]", err)
 		return
 	}
 	counter := model.Counter{UUID: uuid.String(), Count: 1, Life: time.Now().Add(body.Duration)}
 	log.Printf("create %s", uuid)
 	countMap[uuid.String()] = counter
-	respondJSON(w, http.StatusOK, counter)
+	ResponseJSON(w, http.StatusOK, counter)
 }
 
 func (server *Server) UpdateCounter(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +106,7 @@ func (server *Server) UpdateCounter(w http.ResponseWriter, r *http.Request) {
 	cnt := countMap[uuid]
 	cnt.Count++
 
-	respondJSON(w, http.StatusOK, cnt)
+	ResponseJSON(w, http.StatusOK, cnt)
 }
 
 func (server *Server) DeleteCounter(w http.ResponseWriter, r *http.Request) {
@@ -112,5 +115,5 @@ func (server *Server) DeleteCounter(w http.ResponseWriter, r *http.Request) {
 	uuid := vars["uuid"]
 	cnt := countMap[uuid]
 	cnt.Count--
-	respondJSON(w, http.StatusOK, cnt)
+	ResponseJSON(w, http.StatusOK, cnt)
 }

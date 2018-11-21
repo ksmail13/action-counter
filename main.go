@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"./config"
-	"./server"
+	"github.com/ksmail13/action-counter/config"
+	"github.com/ksmail13/action-counter/server"
 )
 
 func main() {
