@@ -11,8 +11,8 @@ import (
 func main() {
 	fmt.Println("hello world")
 
-	conf := &config.Config{}
-	serv := &server.Server{Repo: repository.Default()}
+	conf := &config.Config{RedisAddr: "dev.redis:10379", RedisPassword: "", RedisDB: 0}
+	serv := &server.Server{Repo: repository.Redis(conf)}
 
 	serv.Initialize(conf)
 	serv.Run(":8080")

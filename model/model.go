@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -9,6 +10,16 @@ type Counter struct {
 	UUID  string    `json:"uuid"`
 	Count int       `json:"count"`
 	Life  time.Time `json:"life"`
+}
+
+// MarshalBinary will implement BinaryMarshaler
+func (c Counter) MarshalBinary() ([]byte, error) {
+	return json.Marshal(c)
+}
+
+// UnmarshalBinary will implement BinaryUnmarshaler
+func (c Counter) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, c)
 }
 
 // Empty is create empty Counter
